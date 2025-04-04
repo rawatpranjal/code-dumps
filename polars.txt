@@ -1,0 +1,863 @@
+Polars Quick Reference (Expanded)
+
+Install: pip install polars
+Import: import polars as pl, import polars.selectors as cs
+
+Core Concepts & Expressions
+
+Chainable: Operations can be linked: df.filter(...).select(...)
+
+Expression API: Preferred for most operations (parallelizable, optimizable). Use methods like select, filter, with_columns, group_by, agg.
+
+[] Indexing: Use for simple, one-off access (e.g., inspection, getting a Series). Less performant for transformations.
+
+Immutability: Polars operations return new DataFrames/LazyFrames (cheaply, often without copying data). Reassign: df = df.with_columns(...).
+
+Lazy Evaluation: Defer execution until needed (.collect()). Allows query optimization.
+
+lazy_df = df.lazy().filter(pl.col("val") > 0).select(...)
+result = lazy_df.collect()
+
+Data Loading & Saving
+Loading Data
+
+CSV Files
+
+Basic Reading:
+
+df = pl.read_csv("data.csv")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Custom Options:
+
+df = pl.read_csv(
+    "data.csv",
+    separator=",",         # Custom delimiter
+    has_header=True,       # Specify if file has headers
+    encoding="utf-8",      # Character encoding
+    null_values=["NA", ""],# Define null value representations
+    dtypes={"age": pl.Int32}, # Specify column data types
+    n_rows=1000,           # Limit number of rows read
+    skip_rows=5,           # Skip top N rows
+    columns=["colA", "colC"] # Select specific columns during read
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Streaming Large CSV Files (Lazy Loading):
+
+lazy_df = pl.scan_csv("large_data.csv") # Creates LazyFrame
+filtered_df = lazy_df.filter(pl.col("value") > 100).collect()
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Parquet Files
+
+Read Parquet:
+
+df = pl.read_parquet("data.parquet")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Select Columns/Rows:
+
+df = pl.read_parquet(
+    "data.parquet",
+    columns=["name", "age"], # Select specific columns
+    n_rows=1000              # Limit number of rows
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Streaming Large Parquet (Lazy Loading):
+
+lazy_df = pl.scan_parquet("large_data.parquet")
+result = lazy_df.filter(...).collect()
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+JSON Files
+
+Read JSON:
+
+# Attempts to infer structure (potentially slow for large files)
+df = pl.read_json("data.json")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Line-Delimited JSON (Recommended):
+
+# Each line is a valid JSON object
+df = pl.read_ndjson("data.ndjson") # Or read_json(..., format="ndjson")
+# Lazy scan for line-delimited JSON
+lazy_df = pl.scan_ndjson("large_data.ndjson")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Excel Files
+
+Requires external engines (xlsx2csv, openpyxl, or pyxlsb). Install e.g., pip install xlsx2csv.
+
+Basic Reading:
+
+df = pl.read_excel(
+    "data.xlsx",
+    sheet_name="Sheet1",    # Specify sheet name or ID (0-based)
+    engine='xlsx2csv',      # Specify engine
+    read_options={          # Options passed to the engine
+        "skip_empty_lines": False
+    }
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Note: Consider converting Excel to CSV/Parquet first for better performance if reading frequently.
+
+Database Connections
+
+Requires connectorx. Install pip install 'polars[database]'.
+
+Read from SQL Database:
+
+# Connection URI varies by database type
+conn_uri = "postgresql://user:pass@host:port/database"
+query = "SELECT col1, col2 FROM my_table WHERE condition"
+df = pl.read_database(query=query, connection=conn_uri)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Read with Partitions (Parallel):
+
+df = pl.read_database(
+    query="SELECT * FROM large_table",
+    connection=conn_uri,
+    partition_on="id",     # Column to partition on
+    partition_num=10       # Number of partitions
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+IPC / Feather Files
+
+Read IPC:
+
+df = pl.read_ipc("data.arrow") # .arrow or .feather extension
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Streaming IPC (Lazy Loading):
+
+lazy_df = pl.scan_ipc("large_data.arrow")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Remote Files (URLs)
+
+Pass URL directly to read functions:
+
+df = pl.read_csv("https://example.com/data.csv")
+df = pl.read_parquet("s3://my-bucket/data.parquet") # Requires fsspec and s3fs
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Saving Data
+
+Save as CSV
+
+df.write_csv("output.csv", separator=",", include_header=True)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Save as Parquet (Recommended)
+
+df.write_parquet(
+    "output.parquet",
+    compression="zstd",       # 'zstd', 'snappy', 'gzip', 'lz4', 'none'
+    compression_level=3,      # Varies by compressor (e.g., 1-22 for zstd)
+    statistics=True,          # Write column statistics (improves read filtering)
+    row_group_size=512*1024   # Number of rows per group (affects read perf)
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Save as JSON / NDJSON
+
+# Standard JSON (can be large, less performant)
+df.write_json("output.json", row_oriented=True) # Or False for column-oriented
+
+# Line-delimited JSON (NDJSON - better for streaming/parsing)
+df.write_ndjson("output.ndjson")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Save as IPC / Feather File
+
+df.write_ipc("output.arrow", compression="zstd") # Supports 'lz4', 'zstd'
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Streaming Large Data (LazyFrame Sink)
+
+For LazyFrames, avoids collecting into memory before writing.
+
+lazy_df = pl.scan_csv("large_file.csv").filter(...)
+
+# Sink to Parquet
+lazy_df.sink_parquet("output_large.parquet", compression="zstd")
+
+# Sink to IPC
+lazy_df.sink_ipc("output_large.arrow", compression="zstd")
+
+# Sink to CSV (less common for large data)
+# Note: sink_csv is not directly available, collect in batches or use other tools
+# Or collect and write if memory allows: lazy_df.collect().write_csv(...)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Supported Formats Summary
+Format	Read Function	Scan Function (Lazy)	Write Function	Sink Function (Lazy)	Notes
+CSV	pl.read_csv	pl.scan_csv	df.write_csv	-	Flexible but slower, less compact
+Parquet	pl.read_parquet	pl.scan_parquet	df.write_parquet	lf.sink_parquet	Recommended: Fast, compressed, typed
+JSON	pl.read_json	-	df.write_json	-	Use NDJSON for better performance
+NDJSON	pl.read_ndjson	pl.scan_ndjson	df.write_ndjson	-	Line-delimited JSON
+IPC/Feather	pl.read_ipc	pl.scan_ipc	df.write_ipc	lf.sink_ipc	Fast inter-process format
+Excel	pl.read_excel	-	-	-	Requires external engine
+SQL Database	pl.read_database	-	df.write_database*	-	Requires connectorx
+Avro	pl.read_avro	pl.scan_avro	df.write_avro	-	
+
+* write_database exists but might be less mature/performant than dedicated DB tools.
+
+Subsetting & Item Access
+Subsetting Rows (Expression API)
+
+Filter by condition:
+
+df.filter(pl.col("col") > value)
+df.filter(pl.col("col").eq("value")) # Explicit equality
+df.filter(col="value")              # Keyword shorthand for equality
+df.filter(pl.col("col").is_in(["a", "b"]))
+df.filter(pl.col("num").is_between(2, 4)) # Inclusive
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Multiple conditions:
+
+df.filter((pl.col("A") == valA) & (pl.col("B") < valB)) # AND (&)
+df.filter((pl.col("A") == valA) | (pl.col("B") < valB)) # OR (|)
+# Comma-separated implies AND
+df.filter(pl.col("A") == valA, pl.col("B") < valB)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+String conditions:
+
+df.filter(pl.col("text").str.contains("pattern"))
+df.filter(pl.col("text").str.starts_with("prefix"))
+df.filter(pl.col("text").str.ends_with("suffix"))
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Sampling:
+
+df.sample(n=10, seed=42)                     # N rows with seed
+df.sample(frac=0.5, with_replacement=True)   # Fraction with replacement
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Head/Tail:
+
+df.head(5)                          # First 5 rows
+df.tail(5)                          # Last 5 rows
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Subsetting Columns (Expression API - select)
+
+By name:
+
+df.select("colA", "colB") # Or df.select(["colA", "colB"])
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Using selectors:
+
+df.select(pl.all())                 # All columns
+df.select(cs.numeric())             # All numeric (float/int)
+df.select(cs.integer())             # Integer columns
+df.select(cs.string())              # String columns
+df.select(cs.matches("^regex.*$"))  # Regex match
+df.select(cs.starts_with("prefix_"))
+df.select(cs.ends_with("_suffix"))
+df.select(cs.by_dtype(pl.Float64)) # Specific dtype
+df.select(pl.col(pl.INTEGER_DTYPES)) # Select based on dtypes list
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Excluding columns:
+
+df.select(pl.all().exclude("col_to_drop", "another_col"))
+df.select(cs.numeric().exclude("id_col"))
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Select and transform:
+
+df.select(pl.col("colA", "colB").cast(pl.Float64))
+df.select(pl.col("colC") * 2) # Select a transformed column
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Accessing Data with [] (Indexing)
+
+Get column as Series: series = df["colA"]
+
+Get single cell value: val = df[row_idx, col_idx] (e.g., df[1, 1]) or val = df[row_idx, "col_name"]
+
+Row slicing (by location): sliced_df = df[1:3] (returns DataFrame)
+
+Column slicing (by location): sliced_df = df[:, 1:3]
+
+Column access (by label): sliced_df = df[:, "colA"] or sliced_df = df[:, ["colA", "colZ"]]
+
+Column slicing (by label): sliced_df = df[:, "colA":"colZ"] # Slices columns by name range
+
+Boolean mask filtering: filtered_df = df[df["colA"] > 10] (Simpler syntax, potentially less optimized than .filter())
+
+Reshaping & DataFrame Ops
+
+Concatenate:
+
+pl.concat([df1, df2], how="vertical")    # Append rows (default)
+pl.concat([df1, df2], how="horizontal")  # Append columns (requires equal height)
+pl.concat([df1, df2], how="diagonal")    # Fill missing columns with null
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Reshape:
+
+# Wide to long
+df.melt(id_vars=["id1", "id2"], value_vars=["v1", "v2"], variable_name="var_name", value_name="val_name")
+# Long to wide (Pandas: pivot_table)
+df.pivot(values="v", index="id", columns="k", aggregate_function="first") # `aggregate_function` needed if duplicates
+# Long to wide (Pandas: pivot) - use `on` instead of `columns`
+df.pivot(index="grp", on="x", values="y")
+# Wide to long (opposite of pivot)
+df_pivoted.unpivot(index="grp", on=["col1", "col2"], variable_name="var", value_name="val")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Sort:
+
+df.sort("col")                        # Ascending
+df.sort("col", descending=True)       # Descending
+df.sort(["colA", "colB"], descending=[False, True]) # Multi-column
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Rename/Drop:
+
+df.rename({"old_name": "new_name"})
+df.drop("colA", "colB")               # Or df.drop(["colA", "colB"])
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Duplicates:
+
+df.unique()                           # Keep unique rows (order not guaranteed, keeps 'any')
+df.unique(subset=["colA", "colB"], keep="first", maintain_order=True) # Specify subset, keep strategy, and order
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Copying:
+
+df_copy = df.clone()                 # Deep copy (copies data)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Summarize Data
+
+Basic info:
+
+df.height               # Number of rows (or len(df))
+df.width                # Number of columns
+df.shape                # (rows, columns)
+df.columns              # List of column names
+df.dtypes               # List of column dtypes
+df.schema               # Dictionary of column names to dtypes
+df.estimated_size("mb") # Estimated memory size in MB
+df.glimpse()            # Transposed view of schema and head
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Column summaries:
+
+df["col"].n_unique()    # Number of unique values
+df["col"].value_counts(sort=True) # Counts of unique values, sorted
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+DataFrame summary:
+
+df.describe()           # Basic stats for numeric columns
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Aggregations
+
+(Use within select, agg, or group_by(...).agg)
+
+Common: pl.sum, pl.min, pl.max, pl.mean, pl.median, pl.std, pl.var, pl.count (non-null count), pl.first, pl.last, pl.n_unique, pl.mode
+
+Quantile: pl.quantile("col", quantile=0.75, interpolation='linear')
+
+List Aggregation: pl.list("col") or pl.col("col").implode() (in group_by)
+
+String Aggregation: pl.col("str_col").str.concat(delimiter="-") (in group_by)
+
+Alias output:
+
+pl.sum("a").alias("a_sum")
+pl.mean("b").name.suffix("_mean") # Appends suffix
+pl.max("c").name.prefix("max_")   # Prepends prefix
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Aggregate multiple columns:
+
+df.select(pl.mean("colA", "colB")) # Mean of selected columns
+df.select(cs.numeric().mean())     # Mean of all numeric columns
+df.select([pl.max("x"), pl.min("y")]) # Different aggs on different cols
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Grouping and Aggregation
+# Group by one or more columns
+grouped = df.group_by("group_col", maintain_order=True) # Preserve group order
+# Group by multiple columns dynamically
+group_cols = ["group1", "group2"]
+grouped_multi = df.group_by(group_cols)
+
+# Apply aggregations
+result = grouped.agg(
+    sum_val=pl.sum("val_col"), # Use keyword args for implicit alias
+    mean_val=pl.mean("val_col"),
+    count_id=pl.count("id_col"), # Count distinct IDs within group
+    first_other=pl.first("other_col"),
+    all_vals_list=pl.list("val_col"), # Collect all values in a list
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Missing Data Handling
+
+Polars uses null for missing values across all types.
+
+Drop nulls:
+
+df.drop_nulls()             # Drop rows with any nulls
+df.drop_nulls(subset=["colA"]) # Drop rows with nulls in specific column(s)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Fill nulls:
+
+df.fill_null(value=0)           # Fill with a specific value (infers type)
+df.fill_null(strategy="forward", limit=2) # Fill strategy with limit
+df.fill_null(0, strategy="literal") # Ensure filling with literal 0
+# Fill nulls based on another column's value (within group_by or window func)
+df.with_columns(pl.col("col_to_fill").fill_null(pl.mean("col_to_fill").over("group_col")))
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Fill NaN (specific to floats):
+
+df.fill_nan(value=0.0)         # Fill floating point NaN values
+df.fill_nan(None)              # Replace NaN with null
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+
+Check for nulls/NaNs:
+
+df.select(pl.col("col").is_null().alias("is_null"))
+df.select(pl.col("float_col").is_nan().alias("is_nan"))
+df.filter(pl.col("col").is_not_null())
+# Count nulls per column
+df.null_count()
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+New Columns & Transformations (with_columns)
+# Add a single new column
+df = df.with_columns((pl.col("a") * 2).alias("a_doubled"))
+
+# Add a constant value column
+df = df.with_columns(pl.lit(1).alias("constant_one")) # Use pl.lit() for literals
+
+# Add column from list/Series (ensure length matches)
+df = df.with_columns(pl.Series("new_col", [val1, val2, ...]))
+
+# Add multiple new/transformed columns
+df = df.with_columns(
+    a_plus_b = pl.col("a") + pl.col("b"), # Implicit alias via keyword arg
+    s_len = pl.col("s").str.lengths(),
+    x_float = pl.col("x").cast(pl.Float64), # Change type
+    # Conditional assignment
+    a_sign = pl.when(pl.col("a") > 0).then(pl.lit("positive"))
+                .when(pl.col("a") < 0).then(pl.lit("negative"))
+                .otherwise(pl.lit("zero")),
+    # Map values
+    category_mapped = pl.col("category").replace({"A": 1, "B": 2}, default=0)
+)
+
+# Add row index column
+df = df.with_row_count(name="idx", offset=1) # Start index from 1
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Type Changes (cast)
+
+Use within with_columns or select:
+
+# Cast single column
+df = df.with_columns(pl.col("col_to_int").cast(pl.Int32, strict=False)) # strict=False allows failure -> null
+
+# Cast multiple columns
+df = df.with_columns(
+    pl.col("col1").cast(pl.Float64),
+    pl.col("col2").cast(pl.Utf8) # Utf8 is the string type
+)
+# Cast multiple columns using selectors
+df = df.with_columns(cs.integer().cast(pl.Float32))
+
+# Cast all columns
+df = df.with_columns(pl.all().cast(pl.Utf8))
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+String Operations (.str)
+
+(Use within expressions: pl.col("str_col").str.*)
+
+pl.col("s").str.lengths()
+pl.col("s").str.contains("pattern", literal=True) # literal=False for regex
+pl.col("s").str.starts_with("prefix")
+pl.col("s").str.ends_with("suffix")
+pl.col("s").str.replace("old", "new", n=1) # Replace first occurrence
+pl.col("s").str.replace_all("old", "new")
+pl.col("s").str.to_uppercase()
+pl.col("s").str.to_lowercase()
+pl.col("s").str.strip_chars(" _") # Remove leading/trailing space or underscore
+pl.col("s").str.split(by="-").alias("s_split") # Returns list column
+pl.col("s").str.extract(r"(\d+)-(\w+)", group_index=1) # Extract regex group
+pl.col("s").str.zfill(5) # Pad with leading zeros
+pl.col("s").str.slice(offset=1, length=3) # Substring
+# Combine strings
+pl.concat_str(["col1", "col2"], separator="-").alias("combined")
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+DateTime Operations (.dt)
+
+(Use within expressions: pl.col("date_col").dt.*)
+
+pl.col("d").dt.year()
+pl.col("d").dt.month()
+pl.col("d").dt.day()
+pl.col("d").dt.hour(), pl.col("d").dt.minute(), pl.col("d").dt.second()
+pl.col("d").dt.ordinal_day() # Day of year
+pl.col("d").dt.weekday()     # Monday=1, Sunday=7
+pl.col("d").dt.week()        # Week number
+pl.col("d").dt.strftime("%Y-%m-%d %H:%M") # Format datetime to string
+pl.col("s").str.strptime(pl.Datetime, "%Y-%m-%d") # Parse string to datetime
+pl.col("d").dt.truncate(every="1mo") # Truncate to start of month
+pl.col("d").dt.round(every="1h")     # Round to nearest hour
+pl.col("d").dt.offset_by("3d")       # Add 3 days duration
+pl.col("d").dt.total_days()          # Extract total days from Duration type
+pl.date_range(start, end, interval="1d", eager=True) # Create range
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+List Operations (.list or .arr)
+
+(Use within expressions: pl.col("list_col").list.*)
+
+pl.col("li").list.lengths()
+pl.col("li").list.sum() # Min, max, mean also available
+pl.col("li").list.get(0) # Get element at index 0
+pl.col("li").list.first() # Same as get(0)
+pl.col("li").list.last()
+pl.col("li").list.contains(value)
+pl.col("li").list.join(separator="-") # Join list elements into string
+pl.col("li").list.unique()
+pl.col("li").list.sort()
+pl.col("li").list.reverse()
+pl.col("li").list.count_matches(element=value)
+pl.col("li").list.eval(pl.element() * 2) # Apply expression to each element
+pl.col("li").list.to_struct(fields=["a", "b"]) # Convert list<T> to struct<a:T, b:T> if length matches
+pl.col("str_col").str.split(by=",").alias("str_list") # Create list from string
+df.explode("list_col") # Create new rows for each element in list
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Rolling Functions
+
+(Use within select, agg, or with_columns)
+
+df.select([
+    pl.col("val").rolling_mean(window_size=3, min_periods=1).alias("roll_mean_3"),
+    pl.col("val").rolling_sum(window_size=5, weights=[1,2,3,2,1]).alias("weighted_roll_sum_5"),
+    pl.col("val").rolling_std(window_size=10, ddof=1).alias("roll_std_10"),
+    # Others: rolling_min, rolling_max, rolling_var, rolling_median, rolling_skew, rolling_quantile
+    # Rolling apply custom function (can be slow)
+    # pl.col("val").rolling_apply(lambda s: s.quantile(0.9), window_size=5).alias("roll_apply_q90")
+])
+
+# Rolling operations on time-based windows (using group_by_dynamic)
+df.group_by_dynamic(
+    index_column="time_col",
+    every="1d",      # Window duration
+    period="3d",     # Rolling period length
+    offset="-1d"     # Start window relative to 'every' timestamp
+).agg(
+    pl.mean("value").alias("rolling_3d_mean")
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Window Functions (over)
+
+(Apply aggregations over groups without collapsing rows)
+
+df.with_columns(
+    # Sum of 'value' for each 'group_col'
+    group_sum = pl.sum("value").over("group_col"),
+    # Rank within each group
+    group_rank = pl.col("value").rank(method="ordinal").over("group_col"),
+    # Mean of 'value' over multiple groups
+    multi_group_mean = pl.mean("value").over(["group1", "group2"]),
+    # Lagged value within group
+    value_lag_1 = pl.col("value").shift(1).over("group_col"),
+    # Rolling mean within group (window function variant)
+    group_rolling_mean = pl.mean("value").rolling(window_size=3).over("group_col"),
+    # Cumulative sum within group
+    group_cumsum = pl.col("value").cumsum().over("group_col"),
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
+Joins
+# Join on same key column name
+df.join(other_df, on="key_col", how="inner") # Default how='inner'
+# Join on different key column names
+df.join(other_df, left_on="df_key", right_on="other_key", how="left", suffix="_right")
+
+# Supported `how` strategies:
+# 'inner': Only matching keys.
+# 'left': All rows from left df, matching from right.
+# 'outer': All rows from both dfs (coalesced key column).
+# 'anti': Rows from left df with no match in right.
+# 'cross': Cartesian product of rows.
+# 'semi': Rows from left df with a match in right.
+# 'asof': Join on nearest key (often time-based). Requires sorted keys.
+df.join_asof(
+    other_df,
+    on="time_col",          # Time/numeric key to match on (must be sorted)
+    by="group_col",         # Optional exact match columns
+    strategy="backward",    # 'backward' (<=), 'forward' (>=), 'nearest'
+    tolerance="1d"          # Optional tolerance for time difference
+)
+IGNORE_WHEN_COPYING_START
+content_copy
+download
+Use code with caution.
+Python
+IGNORE_WHEN_COPYING_END
